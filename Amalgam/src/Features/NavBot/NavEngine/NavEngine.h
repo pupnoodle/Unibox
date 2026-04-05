@@ -13,7 +13,8 @@ Enum(PriorityList, None,
 	Engineer,
 	GetHealth,
 	EscapeSpawn, EscapeDanger,
-	Followbot
+	Followbot,
+	Forced
 )
 
 struct Crumb_t
@@ -181,9 +182,10 @@ public:
 	void UpdateStuckTime(CTFPlayer* pLocal, CUserCmd* pCmd);
 
 	// Make sure to update m_pLocalArea with GetLocalNavArea before running
-	bool NavTo(const Vector& vDestination, PriorityListEnum::PriorityListEnum ePriority = PriorityListEnum::Patrol, bool bShouldRepath = true, bool bNavToLocal = true, bool bIgnoreTraces = false);
+	bool NavTo(const Vector& vDestination, PriorityListEnum::PriorityListEnum ePriority = PriorityListEnum::Forced, bool bShouldRepath = true, bool bNavToLocal = true, bool bIgnoreTraces = false);
 
-	float GetPathCost(const Vector& vLocalOrigin, const Vector& vDestination);
+	float GetPathCost(CNavArea* pStartArea, CNavArea* pDestinationArea);
+	float GetPathCost(const Vector& vStart, const Vector& vDestination, bool bLocal = true);
 
 	CNavArea* GetLocalNavArea(const Vector& vLocalOrigin);
 	const Vector& GetCurrentPathDir() const { return m_vCurrentPathDir; }

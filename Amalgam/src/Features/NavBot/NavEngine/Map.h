@@ -125,6 +125,8 @@ public:
 	bool m_bFreeBlacklistBlocked = false;
 	bool m_bIgnoreSentryBlacklist = false;
 
+	bool m_bSkipSpawn = false;
+
 	std::vector<PathNode_t> m_vPathNodes;
 	uint32_t m_iQueryId = 0;
 	

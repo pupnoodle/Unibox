@@ -219,6 +219,7 @@ ClosestEnemy_t CBotUtils::UpdateCloseEnemies(CTFPlayer* pLocal, CTFWeaponBase* p
 {
 	m_vCloseEnemies.clear();
 
+	Vector vLocalOrigin = pLocal->GetAbsOrigin();
 	for (auto pEntity : H::Entities.GetGroup(EntityEnum::PlayerEnemy))
 	{
 		auto pPlayer = pEntity->As<CTFPlayer>();
@@ -226,7 +227,8 @@ ClosestEnemy_t CBotUtils::UpdateCloseEnemies(CTFPlayer* pLocal, CTFWeaponBase* p
 		if (ShouldTarget(pLocal, pWeapon, iEntIndex) == ShouldTargetEnum::DontTarget)
 			continue;
 
-		m_vCloseEnemies.emplace_back(iEntIndex, pPlayer, pLocal->GetAbsOrigin().DistTo(pPlayer->GetAbsOrigin()));
+		Vector vOrigin = pPlayer->GetAbsOrigin();
+		m_vCloseEnemies.emplace_back(iEntIndex, pPlayer, vOrigin, vLocalOrigin.DistTo(vOrigin));
 	}
 
 	std::sort(m_vCloseEnemies.begin(), m_vCloseEnemies.end(), [](const ClosestEnemy_t& a, const ClosestEnemy_t& b) -> bool

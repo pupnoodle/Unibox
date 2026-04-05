@@ -262,13 +262,13 @@ void CCreateMove::AntiCheatCompatibility(CUserCmd* pCmd)
 
 
 
-void CCreateMove::Run(int nSequenceNum, float flInputSampleFrametime, bool bActive)
+void CCreateMove::Run(int nSequenceNum, float flInputSampleFrametime)
 {
 	{
 		char autoallow[16];
 		S::C_BaseAnimating_AutoAllowBoneAccess.Call<void>(autoallow, true, false);
 		I::MDLCache->BeginLock();
-		I::Input->CreateMove(nSequenceNum, flInputSampleFrametime, bActive);
+		I::Input->CreateMove(nSequenceNum, flInputSampleFrametime, !I::ClientState->IsPaused());
 		I::MDLCache->EndLock();
 		S::C_BaseAnimating_AutoAllowBoneAccessOnDelete.Call<void>(autoallow);
 	}

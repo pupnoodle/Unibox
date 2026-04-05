@@ -8,6 +8,7 @@
 #include "../../Misc/Misc.h"
 #include "../BotUtils.h"
 #include "../../FollowBot/FollowBot.h"
+#include "../NavBotJobs/EscapeDanger.h"
 
 static bool IsMovementLocked(CTFPlayer* pLocal)
 {
@@ -706,7 +707,7 @@ bool CNavEngine::NavTo(const Vector& vDestination, PriorityListEnum::PriorityLis
 
 			constexpr float flSameDestinationRadiusSq = 650.f * 650.f;
 			constexpr float flFailWindow = 2.25f;
-			const int iFallbackThreshold = ePriority == PriorityListEnum::Patrol ? 1 : 2;
+			const int iFallbackThreshold = ePriority == PriorityListEnum::Patrol || ePriority == PriorityListEnum::Forced ? 1 : 2;
 
 			const int iNow = I::GlobalVars->tickcount;
 			const int iWindowTicks = TIME_TO_TICKS(flFailWindow);
@@ -1074,24 +1075,30 @@ bool CNavEngine::NavTo(const Vector& vDestination, PriorityListEnum::PriorityLis
 	return true;
 }
 
-float CNavEngine::GetPathCost(const Vector& vLocalOrigin, const Vector& vDestination)
+float CNavEngine::GetPathCost(CNavArea* pStartArea, CNavArea* pDestinationArea)
+{
+	float flCost;
+	std::vector<void*> vPath;
+	if (m_pMap->Solve(pStartArea, pDestinationArea, &vPath, &flCost) == micropather::MicroPather::START_END_SAME)
+		return 0.f;
+
+	return flCost;
+}
+
+float CNavEngine::GetPathCost(const Vector& vStart, const Vector& vDestination, bool bLocal)
 {
 	if (!IsNavMeshLoaded())
 		return FLT_MAX;
 
-	if (!GetLocalNavArea(vLocalOrigin))
+	CNavArea* pStartArea = bLocal ? GetLocalNavArea(vStart) : FindClosestNavArea(vStart, false);
+	if (!pStartArea)
 		return FLT_MAX;
 
 	auto pDestArea = FindClosestNavArea(vDestination, false);
 	if (!pDestArea)
 		return FLT_MAX;
 
-	float flCost;
-	std::vector<void*> vPath;
-	if (m_pMap->Solve(m_pLocalArea, pDestArea, &vPath, &flCost) == micropather::MicroPather::START_END_SAME)
-		return 0.f;
-
-	return flCost;
+	return GetPathCost(pStartArea, pDestArea);
 }
 
 CNavArea* CNavEngine::GetLocalNavArea(const Vector& pLocalOrigin)
@@ -1492,6 +1499,7 @@ void CNavEngine::Reset(bool bForced)
 
 		if (bForced || !m_pMap || m_pMap->m_sMapName != sLevelName)
 		{
+			F::NavBotDanger.ResetSpawn();
 			F::DangerManager.Reset();
 			sLevelName.erase(sLevelName.find_last_of('.'));
 			std::string sNavPath = std::format("{}\\tf\\{}.nav", sPath, sLevelName);

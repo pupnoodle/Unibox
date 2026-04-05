@@ -8,8 +8,17 @@ Enum(EngineerTaskStage, None,
 
 struct BuildingSpot_t
 {
-	float m_flDistanceToTarget = FLT_MAX;
+	float m_flCost = FLT_MAX;
 	Vector m_vPos = {};
+};
+
+struct FocusPoint_t
+{
+	bool m_bDefensive = false;
+	bool m_bBack = false;
+	float flTime = FLT_MAX;
+	Vector m_vPos = {};
+	CNavArea* m_pArea = nullptr;
 };
 
 class CNavBotEngineer
@@ -18,18 +27,21 @@ private:
 	int m_iBuildAttempts = 0;
 	float m_flBuildYaw = 0.0f;
 	std::vector<BuildingSpot_t>  m_vBuildingSpots;
+	FocusPoint_t m_tCurrentFocusPoint = {};
 	std::vector<Vector> m_vFailedSpots;
 private:
 	bool BuildingNeedsToBeSmacked(CBaseObject* pBuilding);
 	bool BlacklistedFromBuilding(CNavArea* pArea);
 	bool NavToSentrySpot(Vector vLocalOrigin);
-	bool BuildBuilding(CUserCmd* pCmd, CTFPlayer* pLocal, ClosestEnemy_t tClosestEnemy, bool bDispenser);
+	bool BuildBuilding(CUserCmd* pCmd, CTFPlayer* pLocal, ClosestEnemy_t& tClosestEnemy, bool bDispenser);
 	bool SmackBuilding(CUserCmd* pCmd, CTFPlayer* pLocal, CBaseObject* pBuilding);
+
+	bool GetFocusPoint(CTFPlayer* pLocal, ClosestEnemy_t& tClosestEnemy, bool bDefensive, FocusPoint_t& tOut);
 public:
 	bool IsEngieMode(CTFPlayer* pLocal);
-	bool Run(CUserCmd* pCmd, CTFPlayer* pLocal, ClosestEnemy_t tClosestEnemy);
+	bool Run(CUserCmd* pCmd, CTFPlayer* pLocal, ClosestEnemy_t& tClosestEnemy);
 
-	void RefreshBuildingSpots(CTFPlayer* pLocal, ClosestEnemy_t tClosestEnemy, bool bForce = false);
+	void RefreshBuildingSpots(CTFPlayer* pLocal, ClosestEnemy_t& tClosestEnemy, bool bForce = false);
 	void RefreshLocalBuildings(CTFPlayer* pLocal);
 	void Reset();
 	void Render();

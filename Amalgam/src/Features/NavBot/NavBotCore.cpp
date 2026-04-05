@@ -34,7 +34,7 @@ void CNavBotCore::UpdateSlot(CTFPlayer* pLocal, ClosestEnemy_t tClosestEnemy)
 			// We are currently building something
 		case EngineerTaskStageEnum::BuildSentry:
 		case EngineerTaskStageEnum::BuildDispenser:
-			if (F::NavBotEngineer.m_tCurrentBuildingSpot.m_flDistanceToTarget != FLT_MAX && F::NavBotEngineer.m_tCurrentBuildingSpot.m_vPos.DistTo(pLocal->GetAbsOrigin()) <= 500.f)
+			if (F::NavBotEngineer.m_tCurrentBuildingSpot.m_flCost != FLT_MAX && F::NavBotEngineer.m_tCurrentBuildingSpot.m_vPos.DistTo(pLocal->GetAbsOrigin()) <= 500.f)
 			{
 				if (pLocal->m_bCarryingObject())
 				{
@@ -412,6 +412,7 @@ void CNavBotCore::Reset()
 	F::NavBotEngineer.Reset();
 	F::NavBotCapture.Reset();
 	F::NavBotRoam.Reset();
+	F::NavBotDanger.ResetSpawn();
 	m_flNextIdleTime = SDK::RandomFloat(4.f, 10.f);
 }
 

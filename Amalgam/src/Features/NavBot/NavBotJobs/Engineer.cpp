@@ -3,6 +3,7 @@
 #include "../NavEngine/NavEngine.h"
 #include "../NavEngine/Controllers/FlagController/FlagController.h"
 #include "../NavEngine/Controllers/CPController/CPController.h"
+#include "../NavEngine/Controllers/PLController/PLController.h"
 
 bool CNavBotEngineer::BuildingNeedsToBeSmacked(CBaseObject* pBuilding)
 {
@@ -74,18 +75,6 @@ bool CNavBotEngineer::NavToSentrySpot(Vector vLocalOrigin)
 			tRandomSpot = m_vBuildingSpots[iAttempts - iRandomOffset];
 
 		// Try to nav there
-		bool bFailed = false;
-		for (auto& vFailed : m_vFailedSpots)
-		{
-			if (vFailed.DistTo(tRandomSpot.m_vPos) < 1.f)
-			{
-				bFailed = true;
-				break;
-			}
-		}
-		if (bFailed)
-			continue;
-
 		if (F::NavEngine.NavTo(tRandomSpot.m_vPos, PriorityListEnum::Engineer))
 		{
 			m_tCurrentBuildingSpot = tRandomSpot;
@@ -96,7 +85,7 @@ bool CNavBotEngineer::NavToSentrySpot(Vector vLocalOrigin)
 	return false;
 }
 
-bool CNavBotEngineer::BuildBuilding(CUserCmd* pCmd, CTFPlayer* pLocal, ClosestEnemy_t tClosestEnemy, bool bDispenser)
+bool CNavBotEngineer::BuildBuilding(CUserCmd* pCmd, CTFPlayer* pLocal, ClosestEnemy_t& tClosestEnemy, bool bDispenser)
 {
 	m_eTaskStage = bDispenser ? EngineerTaskStageEnum::BuildDispenser : EngineerTaskStageEnum::BuildSentry;
 
@@ -116,7 +105,7 @@ bool CNavBotEngineer::BuildBuilding(CUserCmd* pCmd, CTFPlayer* pLocal, ClosestEn
 		return F::NavBotSupplies.Run(pCmd, pLocal, GetSupplyEnum::Ammo | GetSupplyEnum::Forced);
 
 	// Try to build! we are close enough
-	if (m_tCurrentBuildingSpot.m_flDistanceToTarget != FLT_MAX && m_tCurrentBuildingSpot.m_vPos.DistTo(pLocal->GetAbsOrigin()) <= (bDispenser ? 500.f : 200.f))
+	if (m_tCurrentBuildingSpot.m_flCost != FLT_MAX && m_tCurrentBuildingSpot.m_vPos.DistTo(pLocal->GetAbsOrigin()) <= (bDispenser ? 500.f : 200.f))
 	{
 		// Don't start building if an enemy is too close and we aren't already carrying the building
 		if (tClosestEnemy.m_flDist < 500.f && tClosestEnemy.m_pPlayer && tClosestEnemy.m_pPlayer->IsAlive() && !pLocal->m_bCarryingObject())
@@ -182,7 +171,107 @@ bool CNavBotEngineer::SmackBuilding(CUserCmd* pCmd, CTFPlayer* pLocal, CBaseObje
 	return true;
 }
 
-void CNavBotEngineer::RefreshBuildingSpots(CTFPlayer* pLocal, ClosestEnemy_t tClosestEnemy, bool bForce)
+bool CNavBotEngineer::GetFocusPoint(CTFPlayer* pLocal, ClosestEnemy_t& tClosestEnemy, bool bDefensive, FocusPoint_t& tOut)
+{
+	int iLocalIdx = pLocal->entindex();
+	int iLocalTeam = pLocal->m_iTeamNum();
+	int iEnemyTeam = (iLocalTeam == TF_TEAM_RED) ? TF_TEAM_BLUE : TF_TEAM_RED;
+	Vector vLocalOrigin = pLocal->GetAbsOrigin();
+
+	bool bSet = false;
+	FocusPoint_t tFocus{bDefensive, false, I::GlobalVars->curtime};
+	if (bDefensive)
+	{
+		if (F::FlagController.GetSpawnPosition(iLocalTeam, tFocus.m_vPos) 
+			|| F::CPController.GetClosestControlPoint(vLocalOrigin, iEnemyTeam, tFocus.m_vPos))
+			bSet = true;
+		else if (F::PLController.GetClosestPayload(vLocalOrigin, iEnemyTeam, tFocus.m_vPos))
+		{
+			bSet = true;
+			tFocus.m_bBack = true;
+		}
+		else if (tClosestEnemy.m_iEntIdx)
+		{
+			bSet = true;
+			tFocus.m_vPos = tClosestEnemy.m_vOrigin;
+			tFocus.m_bBack = true;
+		}
+	}
+	else if (F::CPController.GetClosestControlPoint(vLocalOrigin, iLocalTeam, tFocus.m_vPos) 
+		|| F::PLController.GetClosestPayload(vLocalOrigin, iLocalTeam, tFocus.m_vPos))
+		bSet = true;
+	else if (tClosestEnemy.m_iEntIdx)
+	{
+		bSet = true;
+		tFocus.m_vPos = tClosestEnemy.m_vOrigin;
+	}
+
+	if (!bSet)
+		return false;
+
+	tFocus.m_pArea = F::NavEngine.FindClosestNavArea(tFocus.m_vPos, false);
+	if (!tFocus.m_pArea)
+		return false;
+
+	auto vTeammates = H::Entities.GetGroup(EntityEnum::PlayerTeam);
+	if (tFocus.m_bBack && vTeammates.size() - 1 > 0)
+	{
+		std::vector<std::pair<CTFPlayer*,float>> vTeammatesSorted;
+		for (auto pTeammate : vTeammates)
+		{
+			int iTeammateIdx = pTeammate->entindex();
+			if (iTeammateIdx == iLocalIdx)
+				continue;
+
+			Vector vOrigin;
+			if (!F::BotUtils.GetDormantOrigin(iTeammateIdx, &vOrigin))
+				continue;
+
+			float flDist = vOrigin.DistTo(tFocus.m_vPos);
+			if (flDist > 1200.f)
+				continue;
+
+			vTeammatesSorted.emplace_back(pTeammate->As<CTFPlayer>(), flDist);
+		}
+
+		if (!vTeammatesSorted.size())
+		{
+			tOut = tFocus;
+			return true;
+		}
+
+		std::sort(vTeammatesSorted.begin(), vTeammatesSorted.end(), [](const std::pair<CTFPlayer*, float>& a, const std::pair<CTFPlayer*, float>& b) -> bool
+			{
+				return a.second < b.second;
+			});
+
+		CNavArea* pNewFocusArea = nullptr;
+		Vector vFocus;
+		int iTeammatesOnFocusPoint = 0;
+		for (auto [pTeammate, _] : vTeammatesSorted)
+		{
+			Vector vNewFocus = vFocus + pTeammate->GetAbsOrigin();
+
+			auto pTempFocusArea = F::NavEngine.FindClosestNavArea(vNewFocus / (iTeammatesOnFocusPoint + 1));
+			if (!pTempFocusArea || F::NavEngine.GetPathCost(tFocus.m_pArea, pTempFocusArea) > 4000.f)
+				continue;
+
+			vFocus = vNewFocus;
+			pNewFocusArea = pTempFocusArea;
+			iTeammatesOnFocusPoint++;
+		}
+		if (iTeammatesOnFocusPoint)
+		{
+			tFocus.m_pArea = pNewFocusArea;
+			tFocus.m_vPos = vFocus / iTeammatesOnFocusPoint;
+		}
+	}
+
+	tOut = tFocus;
+	return true;
+}
+
+void CNavBotEngineer::RefreshBuildingSpots(CTFPlayer* pLocal, ClosestEnemy_t& tClosestEnemy, bool bForce)
 {
 	if (!IsEngieMode(pLocal))
 		return;
@@ -193,39 +282,23 @@ void CNavBotEngineer::RefreshBuildingSpots(CTFPlayer* pLocal, ClosestEnemy_t tCl
 	{
 		m_vBuildingSpots.clear();
 
-		int iLocalTeam = pLocal->m_iTeamNum();
-		int iEnemyTeam = (iLocalTeam == TF_TEAM_RED) ? TF_TEAM_BLUE : TF_TEAM_RED;
-
-		// Determine the "front line" or enemy focus point
-		Vector vEnemyOrigin;
-		bool bFoundEnemy = false;
-
-		// 1. Try dormant enemy origin (last known position of the closest enemy)
-		if (F::BotUtils.GetDormantOrigin(tClosestEnemy.m_iEntIdx, &vEnemyOrigin))
-			bFoundEnemy = true;
-		// 2. Try enemy objective (if we are attacking)
-		else if (F::FlagController.GetPosition(iEnemyTeam, vEnemyOrigin))
-			bFoundEnemy = true;
-		else if (F::CPController.GetClosestControlPoint(pLocal->GetAbsOrigin(), iEnemyTeam, vEnemyOrigin))
-			bFoundEnemy = true;
-		// 3. Fallback to our own objective (defending)
-		else if (F::FlagController.GetSpawnPosition(iLocalTeam, vEnemyOrigin))
-			bFoundEnemy = true;
-		// 4. Fallback to enemy spawn
-		else if (F::FlagController.GetSpawnPosition(iEnemyTeam, vEnemyOrigin))
-			bFoundEnemy = true;
-
-		if (!bFoundEnemy)
+		FocusPoint_t tFocus;
+		if (!GetFocusPoint(pLocal, tClosestEnemy, !bHasGunslinger, tFocus))
 			return;
+
+		m_tCurrentFocusPoint = tFocus;
 
 		// Check for all threats that could rape us
 		std::vector<CTFPlayer*> vEnemies;
-		for (auto pEntity : H::Entities.GetGroup(EntityEnum::PlayerTeam))
+		if (tFocus.m_bDefensive)
 		{
-			auto pPlayer = pEntity->As<CTFPlayer>();
-			if (pPlayer->IsDormant() || !pPlayer->IsAlive() || pPlayer->m_iTeamNum() == iLocalTeam)
-				continue;
-			vEnemies.push_back(pPlayer);
+			for (auto pEntity : H::Entities.GetGroup(EntityEnum::PlayerEnemy))
+			{
+				auto pPlayer = pEntity->As<CTFPlayer>();
+				if (pPlayer->IsDormant() || !pPlayer->IsAlive())
+					continue;
+				vEnemies.push_back(pPlayer);
+			}
 		}
 
 		for (auto& tArea : F::NavEngine.GetNavFile()->m_vAreas)
@@ -236,17 +309,19 @@ void CNavBotEngineer::RefreshBuildingSpots(CTFPlayer* pLocal, ClosestEnemy_t tCl
 			if (tArea.m_iTFAttributeFlags & (TF_NAV_SPAWN_ROOM_RED | TF_NAV_SPAWN_ROOM_BLUE | TF_NAV_SPAWN_ROOM_EXIT))
 				continue;
 
-			float flDistToEnemyOrigin = tArea.m_vCenter.DistTo(vEnemyOrigin);
-			if (flDistToEnemyOrigin >= 4000.f)
+			if (tArea.m_vCenter.DistTo(tFocus.m_vPos) > 2000.f)
 				continue;
 
-			auto AddSpot = [&](const Vector& vPos)
+			auto AddSpot = [&](CNavArea* pArea, const Vector& vPos)
 				{
 					for (auto& vFailed : m_vFailedSpots)
 					{
 						if (vFailed.DistTo(vPos) < 1.f)
 							return;
 					}
+
+					if (F::NavEngine.GetPathCost(tFocus.m_pArea, pArea) > 4000.f)
+						return;
 
 					// Check if we can actually build here, sentry size is roughly 40x40x66.
 					CGameTrace trace;
@@ -261,41 +336,36 @@ void CNavBotEngineer::RefreshBuildingSpots(CTFPlayer* pLocal, ClosestEnemy_t tCl
 					if (!trace.DidHit())
 						return;
 
-					float flDistToEnemy = vPos.DistTo(vEnemyOrigin);
-					float flScore = flDistToEnemy;
-
-					// too close to enemy
-					float flMinDist = bHasGunslinger ? 400.f : 800.f;
-					if (flDistToEnemy < flMinDist)
-						flScore += (flMinDist - flDistToEnemy) * 10.f;
+					float flDistToFocus = vPos.DistTo(tFocus.m_vPos);
+					float flCost = flDistToFocus;
 
 					// too far
-					if (flDistToEnemy > 2500.f)
-						flScore += (flDistToEnemy - 2500.f) * 2.f;
+					if (flDistToFocus > 2500.f)
+						flCost += (flDistToFocus - 2500.f) * 2.f;
 
 					for (auto pEnemy : vEnemies)
 					{
 						if (pEnemy->GetAbsOrigin().DistTo(vPos) < 600.f)
 						{
-							flScore += 2000.f;
+							flCost += 2000.f;
 							break;
 						}
 					}
 
 					if (tArea.m_iTFAttributeFlags & TF_NAV_SENTRY_SPOT)
-						flScore -= 200.f;
+						flCost -= 200.f;
 
-					m_vBuildingSpots.emplace_back(flScore, vPos);
+					m_vBuildingSpots.emplace_back(flCost, vPos);
 				};
 
 			if (tArea.m_iTFAttributeFlags & TF_NAV_SENTRY_SPOT)
-				AddSpot(tArea.m_vCenter);
+				AddSpot(&tArea, tArea.m_vCenter);
 			else
 			{
 				for (auto& tHidingSpot : tArea.m_vHidingSpots)
 				{
 					if (tHidingSpot.HasGoodCover())
-						AddSpot(tHidingSpot.m_vPos);
+						AddSpot(&tArea, tHidingSpot.m_vPos);
 				}
 			}
 		}
@@ -303,7 +373,7 @@ void CNavBotEngineer::RefreshBuildingSpots(CTFPlayer* pLocal, ClosestEnemy_t tCl
 		std::sort(m_vBuildingSpots.begin(), m_vBuildingSpots.end(),
 			[](const BuildingSpot_t& a, const BuildingSpot_t& b) -> bool
 			{
-				return a.m_flDistanceToTarget < b.m_flDistanceToTarget;
+				return a.m_flCost < b.m_flCost;
 			});
 	}
 }
@@ -317,14 +387,18 @@ void CNavBotEngineer::Render()
 	if (!pLocal || !pLocal->IsAlive() || pLocal->m_iClass() != TF_CLASS_ENGINEER)
 		return;
 
-	for (auto& tSpot : m_vBuildingSpots)
+	if (!m_vBuildingSpots.empty())
 	{
-		bool bIsCurrent = (tSpot.m_vPos == m_tCurrentBuildingSpot.m_vPos);
-		Color_t color = bIsCurrent ? Color_t(0, 255, 0, 255) : Color_t(255, 255, 255, 100);
+		for (auto& tSpot : m_vBuildingSpots)
+		{
+			bool bIsCurrent = (tSpot.m_vPos == m_tCurrentBuildingSpot.m_vPos);
+			Color_t color = bIsCurrent ? Color_t(0, 255, 0, 255) : Color_t(255, 255, 255, 100);
 
-		H::Draw.RenderWireframeBox(tSpot.m_vPos, Vector(-30, -30, 0), Vector(30, 30, 66), Vector(0, 0, 0), color, false);
-		if (bIsCurrent)
-			H::Draw.RenderBox(tSpot.m_vPos, Vector(-30, -30, 0), Vector(30, 30, 66), Vector(0, 0, 0), Color_t(0, 255, 0, 50), false);
+			H::Draw.RenderWireframeBox(tSpot.m_vPos, Vector(-30, -30, 0), Vector(30, 30, 66), Vector(0, 0, 0), color, false);
+			if (bIsCurrent)
+				H::Draw.RenderBox(tSpot.m_vPos, Vector(-30, -30, 0), Vector(30, 30, 66), Vector(0, 0, 0), Color_t(0, 255, 0, 50), false);
+		}
+		H::Draw.RenderWireframeSphere(m_tCurrentFocusPoint.m_vPos, 10.f, 36, 36, Color_t(255, 255, 0, 255));
 	}
 }
 
@@ -350,6 +424,7 @@ void CNavBotEngineer::Reset()
 	m_vBuildingSpots.clear();
 	m_vFailedSpots.clear();
 	m_tCurrentBuildingSpot = {};
+	m_tCurrentFocusPoint = {};
 	m_eTaskStage = EngineerTaskStageEnum::None;
 }
 
@@ -360,7 +435,7 @@ bool CNavBotEngineer::IsEngieMode(CTFPlayer* pLocal)
 		pLocal && pLocal->IsAlive() && pLocal->m_iClass() == TF_CLASS_ENGINEER;
 }
 
-bool CNavBotEngineer::Run(CUserCmd* pCmd, CTFPlayer* pLocal, ClosestEnemy_t tClosestEnemy)
+bool CNavBotEngineer::Run(CUserCmd* pCmd, CTFPlayer* pLocal, ClosestEnemy_t& tClosestEnemy)
 {
 	if (!IsEngieMode(pLocal))
 	{
@@ -368,20 +443,39 @@ bool CNavBotEngineer::Run(CUserCmd* pCmd, CTFPlayer* pLocal, ClosestEnemy_t tClo
 		return false;
 	}
 
+	bool bHasGunslinger = G::SavedDefIndexes[SLOT_MELEE] == Engi_t_TheGunslinger;
 	static Timer tBuildingCheckTimer;
 	if (tBuildingCheckTimer.Run(10.f))
 	{
-		if (!m_pMySentryGun || !m_pMyDispenser)
+		if (!m_pMySentryGun || !m_pMyDispenser || (m_tCurrentFocusPoint.flTime != FLT_MAX && m_tCurrentFocusPoint.flTime + 60.f < I::GlobalVars->curtime))
+		{
 			RefreshBuildingSpots(pLocal, tClosestEnemy, true);
+
+			if (m_vBuildingSpots.size())
+			{
+				auto tBuildSpot = m_vBuildingSpots.front();
+
+				// Too far away
+				bool bDestroySentry = m_pMySentryGun && !m_pMySentryGun->m_bPlacing() && m_pMySentryGun->GetAbsOrigin().DistTo(tBuildSpot.m_vPos) >= 3500.f;
+				bool bDestroyDispenser = m_pMyDispenser && !m_pMyDispenser->m_bPlacing() && m_pMyDispenser->GetAbsOrigin().DistTo(tBuildSpot.m_vPos) >= 3500.f;
+				if (bDestroySentry || bDestroyDispenser)
+				{
+					I::EngineClient->ClientCmd_Unrestricted("destroy 2");
+					I::EngineClient->ClientCmd_Unrestricted("destroy 0");
+					m_eTaskStage = EngineerTaskStageEnum::None;
+					return true;
+				}
+			}
+		}
 	}
 
 	// Already have a sentry
 	if (m_pMySentryGun && !m_pMySentryGun->m_bPlacing())
 	{
-		if (G::SavedDefIndexes[SLOT_MELEE] == Engi_t_TheGunslinger)
+		if (bHasGunslinger)
 		{
 			// Too far away, destroy it
-			if (m_pMySentryGun->GetAbsOrigin().DistTo(pLocal->GetAbsOrigin()) >= 1800.f)
+			if (m_flDistToSentry >= 1800.f)
 				I::EngineClient->ClientCmd_Unrestricted("destroy 2");
 
 			// Return false so we run another task

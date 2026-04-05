@@ -34,6 +34,9 @@ int CMap::Solve(CNavArea* pStart, CNavArea* pEnd, std::vector<void*>* path, floa
 	std::vector<micropather::StateCost> vNeighbors;
 	vNeighbors.reserve(8);
 
+	m_bSkipSpawn = !(pStart->m_iTFAttributeFlags & (TF_NAV_SPAWN_ROOM_RED | TF_NAV_SPAWN_ROOM_BLUE)) 
+				&& !(pEnd->m_iTFAttributeFlags & (TF_NAV_SPAWN_ROOM_RED | TF_NAV_SPAWN_ROOM_BLUE));
+
 	while (!openSet.empty())
 	{
 		size_t uCurrentIndex = openSet.top().second;
@@ -133,6 +136,10 @@ void CMap::AdjacentCost(void* pArea, std::vector<micropather::StateCost>* pAdjac
 	{
 		CNavArea* pNextArea = tConnection.m_pArea;
 		if (!pNextArea || pNextArea == pCurrentArea)
+			continue;
+
+		if (m_bSkipSpawn && (pCurrentArea->m_iTFAttributeFlags & (TF_NAV_SPAWN_ROOM_RED | TF_NAV_SPAWN_ROOM_BLUE) ||
+			pNextArea->m_iTFAttributeFlags & (TF_NAV_SPAWN_ROOM_RED | TF_NAV_SPAWN_ROOM_BLUE)))
 			continue;
 
 		if (!IsAreaValid(pCurrentArea) || !IsAreaValid(pNextArea) || !HasDirectConnection(pCurrentArea, pNextArea))
@@ -325,12 +332,17 @@ bool CMap::HasDirectConnection(CNavArea* pFrom, CNavArea* pTo) const
 	if (pFrom == pTo)
 		return true;
 
+	bool bFound = false;
 	for (const auto& tConnection : pFrom->m_vConnections)
 	{
 		if (tConnection.m_pArea == pTo)
-			return true;
+		{
+			bFound = true;
+			break;
+		}
 	}
-
+	if (bFound && pFrom->m_flMaxZ > pTo->m_flMinZ - PLAYER_CROUCHED_JUMP_HEIGHT)
+		return true;
 	return false;
 }
 
@@ -482,12 +494,17 @@ bool CMap::IsOneWay(CNavArea* pFrom, CNavArea* pTo) const
 	if (!pFrom || !pTo)
 		return true;
 
+	bool bFound = false;
 	for (auto& tBackConnection : pTo->m_vConnections)
 	{
 		if (tBackConnection.m_pArea == pFrom)
-			return false;
+		{
+			bFound = true;
+			break;
+		}
 	}
-
+	if (bFound && pTo->m_flMaxZ > pFrom->m_flMinZ - PLAYER_CROUCHED_JUMP_HEIGHT)
+		return false;
 	return true;
 }
 

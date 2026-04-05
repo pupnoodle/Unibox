@@ -18,7 +18,7 @@ private:
 	};
 	void AntiCheatCompatibility(CUserCmd* pCmd);
 public:
-	void Run(int nSequenceNum, float flInputSampleFrametime, bool bActive);
+	void Run(int nSequenceNum, float flInputSampleFrametime);
 };
 
 ADD_FEATURE(CCreateMove, CreateMove);

@@ -33,7 +33,6 @@ public:
 
 	void Init();
 	void Update();
-
 };
 
 ADD_FEATURE(CFlagController, FlagController);

@@ -95,8 +95,6 @@ static inline std::deque<Frame_t> StackTrace(PCONTEXT pContext)
 			auto sPattern = U::Memory.GenerateSignatureAtAddress(tStackFrame.AddrPC.Offset);
 			tFrame.m_sPattern = sPattern.empty() ? "No signature" : sPattern;
 		}
-
-		vTrace.push_back(tFrame);
 	}
 
 	SymCleanup(hProcess);

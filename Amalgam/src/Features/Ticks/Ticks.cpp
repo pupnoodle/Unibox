@@ -237,7 +237,7 @@ void CTicks::MoveFunc(float accumulated_extra_samples, bool bFinalTick)
 	if (I::ClientState->m_nSignonState == SIGNONSTATE_FULL)
 	{
 		int nNextCommandNr = I::ClientState->lastoutgoingcommand + I::ClientState->chokedcommands + 1;
-		F::CreateMove.Run(nNextCommandNr, TICK_INTERVAL - accumulated_extra_samples, !I::ClientState->IsPaused());
+		F::CreateMove.Run(nNextCommandNr, TICK_INTERVAL - accumulated_extra_samples);
 
 		if (I::DemoRecorder->IsRecording())
 			I::DemoRecorder->RecordUserInput(nNextCommandNr);
@@ -275,7 +275,7 @@ void CTicks::MoveFunc(float accumulated_extra_samples, bool bFinalTick)
 
 			float flTimeOut = I::ClientState->m_NetChannel->GetTimeoutSeconds();
 			float flRemainingTime = flTimeOut - I::ClientState->m_NetChannel->GetTimeSinceLastReceived();
-			S::Con_NXPrintf.Call<void>(&np, "WARNINGA:  Connection Problem"); np.index = 3;
+			S::Con_NXPrintf.Call<void>(&np, "WARNING:  Connection Problem"); np.index = 3;
 			S::Con_NXPrintf.Call<void>(&np, "Auto-disconnect in %.1f seconds", flRemainingTime);
 
 			I::ClientState->ForceFullUpdate();
