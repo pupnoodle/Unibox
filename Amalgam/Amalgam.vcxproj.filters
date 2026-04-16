@@ -208,6 +208,10 @@
     <ClCompile Include="src\Features\NavBot\BotUtils.cpp" />
     <ClCompile Include="src\Features\NavBot\DangerManager\DangerManager.cpp" />
     <ClCompile Include="src\Features\NavBot\NavBotCore.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavAreaUtils.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotConfig.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotDebug.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavRuntime.cpp" />
     <ClCompile Include="src\Features\NavBot\NavEngine\Map.cpp" />
     <ClCompile Include="src\Features\NavBot\NavBotJobs\GroupWithOthers.cpp" />
     <ClCompile Include="src\Features\NavBot\NavBotJobs\Roam.cpp" />
@@ -219,6 +223,8 @@
     <ClCompile Include="src\Features\NavBot\NavBotJobs\Engineer.cpp" />
     <ClCompile Include="src\Features\NavBot\NavBotJobs\SnipeSentry.cpp" />
     <ClCompile Include="src\Features\NavBot\NavBotJobs\EscapeDanger.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotJobs\JobSystem.cpp" />
+    <ClCompile Include="src\Features\NavBot\NavBotJobs\NavJobUtils.cpp" />
     <ClCompile Include="src\Features\Players\SteamProfileCache.cpp" />
     <ClCompile Include="src\Features\Createmove\Createmove.cpp" />
     <ClCompile Include="src\Hooks\CGameEventManager_FireEventClientSide.cpp" />
@@ -639,6 +645,10 @@
     <ClInclude Include="src\Features\NavBot\BotUtils.h" />
     <ClInclude Include="src\Features\NavBot\DangerManager\DangerManager.h" />
     <ClInclude Include="src\Features\NavBot\NavBotCore.h" />
+    <ClInclude Include="src\Features\NavBot\NavAreaUtils.h" />
+    <ClInclude Include="src\Features\NavBot\NavBotConfig.h" />
+    <ClInclude Include="src\Features\NavBot\NavBotDebug.h" />
+    <ClInclude Include="src\Features\NavBot\NavRuntime.h" />
     <ClInclude Include="src\Features\NavBot\NavEngine\Map.h" />
     <ClInclude Include="src\Features\NavBot\NavBotJobs\EscapeDanger.h" />
     <ClInclude Include="src\Features\NavBot\NavBotJobs\Roam.h" />
@@ -650,6 +660,8 @@
     <ClInclude Include="src\Features\NavBot\NavBotJobs\Engineer.h" />
     <ClInclude Include="src\Features\NavBot\NavBotJobs\Melee.h" />
     <ClInclude Include="src\Features\NavBot\NavBotJobs\GroupWithOthers.h" />
+    <ClInclude Include="src\Features\NavBot\NavBotJobs\JobSystem.h" />
+    <ClInclude Include="src\Features\NavBot\NavBotJobs\NavJobUtils.h" />
     <ClInclude Include="src\Features\Players\SteamProfileCache.h" />
     <ClInclude Include="src\Features\Createmove\Createmove.h" />
     <ClInclude Include="src\SDK\Definitions\Interfaces\IFileSystem.h" />

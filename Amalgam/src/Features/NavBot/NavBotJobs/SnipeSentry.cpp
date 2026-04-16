@@ -1,4 +1,5 @@
 #include "SnipeSentry.h"
+#include "NavJobUtils.h"
 #include "../NavEngine/NavEngine.h"
 
 bool CNavBotSnipe::IsAreaValidForSnipe(Vector vEntOrigin, Vector vAreaOrigin, bool bShortRangeClass, bool bFixSentryZ)
@@ -29,13 +30,13 @@ bool CNavBotSnipe::TryToSnipe(int iEntIdx, bool bShortRangeClass)
 	if (!pNavFile)
 		return false;
 
-	std::vector<std::pair<CNavArea*, float>> vGoodAreas;
+	std::vector<NavAreaScore_t> vGoodAreas;
 	for (auto& area : pNavFile->m_vAreas)
 	{
 		// Not usable
 		if (!IsAreaValidForSnipe(vOrigin, area.m_vCenter, bShortRangeClass, false))
 			continue;
-		vGoodAreas.push_back(std::pair<CNavArea*, float>(&area, area.m_vCenter.DistTo(vOrigin)));
+		vGoodAreas.push_back({ &area, area.m_vCenter.DistTo(vOrigin) });
 	}
 
 	// Sort based on distance

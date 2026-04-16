@@ -1,4 +1,6 @@
 #include "Reload.h"
+#include "NavJobUtils.h"
+#include "../NavAreaUtils.h"
 #include "../NavEngine/NavEngine.h"
 
 bool CNavBotReload::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon)
@@ -23,30 +25,16 @@ bool CNavBotReload::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon)
 		return F::NavEngine.m_eCurrentPriority == PriorityListEnum::RunReload;
 
 	// Get closest enemy to vicheck
-	CBaseEntity* pClosestEnemy = nullptr;
-	float flBestDist = FLT_MAX;
-	for (auto pEntity : H::Entities.GetGroup(EntityEnum::PlayerEnemy))
-	{
-		if (!F::BotUtils.ShouldTarget(pLocal, pWeapon, pEntity->entindex()))
-			continue;
-
-		float flDist = pEntity->GetAbsOrigin().DistTo(pLocal->GetAbsOrigin());
-		if (flDist > flBestDist)
-			continue;
-
-		flBestDist = flDist;
-		pClosestEnemy = pEntity;
-	}
-
-	if (!pClosestEnemy)
+	const auto tClosestEnemy = NavJobUtils::FindClosestTargetEnemy(pLocal, pWeapon);
+	if (!tClosestEnemy.m_pPlayer)
 		return false;
 
-	Vector vVischeckPoint = pClosestEnemy->GetAbsOrigin();
+	Vector vVischeckPoint = tClosestEnemy.m_vOrigin;
 	vVischeckPoint.z += PLAYER_CROUCHED_JUMP_HEIGHT;
 
 	// Get the best non visible area
 	std::pair<CNavArea*, int> tBestSpot;
-	if (!F::NavBotCore.FindClosestHidingSpot(F::NavEngine.GetLocalNavArea(), vVischeckPoint, 5, tBestSpot))
+	if (!NavAreaUtils::FindClosestHidingSpot(F::NavEngine.GetLocalNavArea(), vVischeckPoint, 5, tBestSpot))
 		return false;
 
 	// If we can, path
@@ -81,25 +69,11 @@ bool CNavBotReload::RunSafe(CTFPlayer* pLocal, CTFWeaponBase* pWeapon)
 	else
 	{
 		// Get closest enemy to vicheck
-		CBaseEntity* pClosestEnemy = nullptr;
-		float flBestDist = FLT_MAX;
-		for (auto pEntity : H::Entities.GetGroup(EntityEnum::PlayerEnemy))
-		{
-			if (!F::BotUtils.ShouldTarget(pLocal, pWeapon, pEntity->entindex()))
-				continue;
-
-			float flDist = pEntity->GetAbsOrigin().DistTo(pLocal->GetAbsOrigin());
-			if (flDist > flBestDist)
-				continue;
-
-			flBestDist = flDist;
-			pClosestEnemy = pEntity;
-		}
-
-		if (pClosestEnemy)
+		const auto tClosestEnemy = NavJobUtils::FindClosestTargetEnemy(pLocal, pWeapon);
+		if (tClosestEnemy.m_pPlayer)
 		{
 			bHasDestination = true;
-			vCurrentDestination = pClosestEnemy->GetAbsOrigin();
+			vCurrentDestination = tClosestEnemy.m_vOrigin;
 			vCurrentDestination.z += PLAYER_CROUCHED_JUMP_HEIGHT;
 		}
 	}
@@ -108,7 +82,7 @@ bool CNavBotReload::RunSafe(CTFPlayer* pLocal, CTFWeaponBase* pWeapon)
 	{
 		// Get the best non visible area
 		std::pair<CNavArea*, int> tBestSpot;
-		if (F::NavBotCore.FindClosestHidingSpot(F::NavEngine.GetLocalNavArea(), vCurrentDestination, 5, tBestSpot))
+		if (NavAreaUtils::FindClosestHidingSpot(F::NavEngine.GetLocalNavArea(), vCurrentDestination, 5, tBestSpot))
 		{
 			// If we can, path
 			if (F::NavEngine.NavTo(tBestSpot.first->m_vCenter, PriorityListEnum::RunSafeReload, true, !F::NavEngine.IsPathing()))

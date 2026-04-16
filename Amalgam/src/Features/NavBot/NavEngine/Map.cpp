@@ -97,11 +97,8 @@ int CMap::Solve(CNavArea* pStart, CNavArea* pEnd, std::vector<void*>* path, floa
 				float h = pNextArea->m_vCenter.DistTo(pEnd->m_vCenter);
 				tNextNode.m_f = flNewG + h;
 
-				if (!tNextNode.m_bInOpen)
-				{
-					tNextNode.m_bInOpen = true;
-					openSet.push({ tNextNode.m_f, uNextIndex });
-				}
+				tNextNode.m_bInOpen = true;
+				openSet.push({ tNextNode.m_f, uNextIndex });
 			}
 		}
 	}

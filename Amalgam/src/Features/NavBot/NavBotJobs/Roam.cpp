@@ -1,5 +1,7 @@
 #include "Roam.h"
 #include "Capture.h"
+#include "NavJobUtils.h"
+#include "../NavAreaUtils.h"
 #include "../DangerManager/DangerManager.h"
 #include "../NavEngine/NavEngine.h"
 #include "../NavEngine/Controllers/Controller.h"
@@ -31,9 +33,9 @@ bool CNavBotRoam::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon)
 		m_iConsecutiveFails = 0;
 	}
 
-	// Don't path constantly
+	// Keep the current roam objective alive between expensive refreshes.
 	if (!tRoamTimer.Run(0.5f))
-		return false;
+		return F::NavEngine.m_eCurrentPriority == PriorityListEnum::Patrol && (m_bDefending || m_pCurrentTargetArea);
 
 	if (F::NavEngine.m_eCurrentPriority > PriorityListEnum::Patrol)
 		return false;
@@ -108,7 +110,7 @@ bool CNavBotRoam::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon)
 				}
 
 				std::pair<CNavArea*, int> tHidingSpot;
-				if (F::NavBotCore.FindClosestHidingSpot(pClosestNav, vVischeckPoint, 5, tHidingSpot, bVischeck))
+				if (NavAreaUtils::FindClosestHidingSpot(pClosestNav, vVischeckPoint, 5, tHidingSpot, bVischeck))
 				{
 					if (tHidingSpot.first && tHidingSpot.first->m_vCenter.DistTo(vLocalOrigin) <= 250.f)
 					{
@@ -224,7 +226,7 @@ bool CNavBotRoam::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon)
 	if (vCandidates.empty())
 		return false;
 
-	std::vector<std::pair<CNavArea*, float>> vScoredAreas;
+	std::vector<NavAreaScore_t> vScoredAreas;
 	vScoredAreas.reserve(vCandidates.size());
 	const float flLocalToObjective = bHasObjectiveAnchor ? vLocalOrigin.DistTo(vObjectiveAnchor) : 0.f;
 
@@ -279,36 +281,37 @@ bool CNavBotRoam::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon)
 
 		float flScore = flObjectiveScore - flSafetyPenalty + flDistanceScore - flVisitedPenalty;
 
-		vScoredAreas.emplace_back(pArea, flScore);
+		vScoredAreas.push_back({ pArea, flScore });
 	}
 
-	std::sort(vScoredAreas.begin(), vScoredAreas.end(), [](const auto& a, const auto& b)
+	std::sort(vScoredAreas.begin(), vScoredAreas.end(), [](const NavAreaScore_t& a, const NavAreaScore_t& b)
 		{
-			return a.second > b.second;
+			return a.m_flScore > b.m_flScore;
 		});
 
 	const size_t uPathCostCandidates = std::min<size_t>(vScoredAreas.size(), 16);
 	for (size_t i = 0; i < uPathCostCandidates; i++)
 	{
 		auto& tScoredArea = vScoredAreas[i];
-		const float flPathCost = F::NavEngine.GetPathCost(vLocalOrigin, tScoredArea.first->m_vCenter);
+		const float flPathCost = F::NavEngine.GetPathCost(vLocalOrigin, tScoredArea.m_pArea->m_vCenter);
 		if (std::isfinite(flPathCost) && flPathCost < FLT_MAX)
-			tScoredArea.second -= flPathCost * 0.12f;
+			tScoredArea.m_flScore -= flPathCost * 0.12f;
 		else
-			tScoredArea.second -= 1200.f;
+			tScoredArea.m_flScore -= 1200.f;
 	}
 
 	if (uPathCostCandidates > 0)
 	{
-		std::sort(vScoredAreas.begin(), vScoredAreas.end(), [](const auto& a, const auto& b)
+		std::sort(vScoredAreas.begin(), vScoredAreas.end(), [](const NavAreaScore_t& a, const NavAreaScore_t& b)
 			{
-				return a.second > b.second;
+				return a.m_flScore > b.m_flScore;
 			});
 	}
 
 	int iAttempts = 0;
-	for (auto& [pArea, _] : vScoredAreas)
+	for (const auto& tAreaScore : vScoredAreas)
 	{
+		auto pArea = tAreaScore.m_pArea;
 		if (!pArea)
 			continue;
 
