@@ -129,6 +129,9 @@ bool CNavBotGroup::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon)
 	if (!(Vars::Misc::Movement::NavBot::Preferences.Value & Vars::Misc::Movement::NavBot::PreferencesEnum::GroupWithOthers))
 		return false;
 
+	static int iConsecutiveFailures = 0;
+	static Vector vLastTargetPos;
+
 	// UpdateLocalBotPositions is called from Run(), so we don't need to call it here
 	// If we haven't found a position in formation, we can't move in formation
 	if (m_iPositionInFormation < 0 || m_vLocalBotPositions.empty())
@@ -168,15 +171,19 @@ bool CNavBotGroup::Run(CTFPlayer* pLocal, CTFWeaponBase* pWeapon)
 	// If we're already close enough to our position, don't bother moving
 	float flDistToTarget = pLocal->GetAbsOrigin().DistTo(vTargetPos);
 	if (flDistToTarget <= 30.f)
-		return true;
+	{
+		// Release the patrol slot once we have actually settled into formation.
+		if (F::NavEngine.IsPathing() && F::NavEngine.m_eCurrentPriority == PriorityListEnum::Patrol && vLastTargetPos.DistTo(vTargetPos) <= 50.f)
+			F::NavEngine.CancelPath();
+
+		iConsecutiveFailures = 0;
+		vLastTargetPos = vTargetPos;
+		return false;
+	}
 
 	// Only try to move to the position if we're not already pathing to something important
 	if (F::NavEngine.m_eCurrentPriority > PriorityListEnum::Patrol)
 		return false;
-
-	static Timer tFailureTimer;
-	static int iConsecutiveFailures = 0;
-	static Vector vLastTargetPos;
 
 	// Check if we're trying to path to the same position but repeatedly failing
 	if (vLastTargetPos.DistTo(vTargetPos) <= 50.f && !F::NavEngine.IsPathing())

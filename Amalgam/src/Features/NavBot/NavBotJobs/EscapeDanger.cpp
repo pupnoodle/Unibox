@@ -1,4 +1,5 @@
 #include "EscapeDanger.h"
+#include "NavJobUtils.h"
 #include "../NavEngine/NavEngine.h"
 #include "../NavEngine/Controllers/FlagController/FlagController.h"
 #include "../NavEngine/Controllers/Controller.h"
@@ -110,7 +111,7 @@ bool CNavBotDanger::EscapeDanger(CTFPlayer* pLocal)
 			vReferencePosition = pLocal->GetAbsOrigin();
 		}
 
-		std::vector<std::pair<CNavArea*, float>> vSafeAreas;
+		std::vector<NavAreaScore_t> vSafeAreas;
 		std::vector<CNavArea*> vAreaPointers;
 
 		// Find areas around current position to escape to
@@ -157,16 +158,16 @@ bool CNavBotDanger::EscapeDanger(CTFPlayer* pLocal)
 		}
 
 		// Sort by score (closer to reference position is better)
-		std::sort(vSafeAreas.begin(), vSafeAreas.end(), [](const std::pair<CNavArea*, float>& a, const std::pair<CNavArea*, float>& b) -> bool
+		std::sort(vSafeAreas.begin(), vSafeAreas.end(), [](const NavAreaScore_t& a, const NavAreaScore_t& b) -> bool
 			{
-				return a.second < b.second;
+				return a.m_flScore < b.m_flScore;
 			});
 
 		int iCalls = 0;
 		// Try to path to safe areas
-		for (auto& tPair : vSafeAreas)
+		for (const auto& tPair : vSafeAreas)
 		{
-			CNavArea* pArea = tPair.first;
+			CNavArea* pArea = tPair.m_pArea;
 			iCalls++;
 			if (iCalls > 10)
 				break;
@@ -313,7 +314,7 @@ bool CNavBotDanger::EscapeProjectiles(CTFPlayer* pLocal)
 	auto pLocalArea = F::NavEngine.GetLocalNavArea();
 
 	// Find safe nav areas sorted by distance
-	std::vector<std::pair<CNavArea*, float>> vSafeAreas;
+	std::vector<NavAreaScore_t> vSafeAreas;
 	std::vector<CNavArea*> vAreaPointers;
 
 	F::NavEngine.GetNavMap()->CollectAreasAround(pLocal->GetAbsOrigin(), 1000.f, vAreaPointers);
@@ -337,17 +338,17 @@ bool CNavBotDanger::EscapeProjectiles(CTFPlayer* pLocal)
 
 	// Sort by distance
 	std::sort(vSafeAreas.begin(), vSafeAreas.end(),
-		[](const std::pair<CNavArea*, float>& a, const std::pair<CNavArea*, float>& b)
+		[](const NavAreaScore_t& a, const NavAreaScore_t& b)
 		{
-			return a.second < b.second;
+			return a.m_flScore < b.m_flScore;
 		});
 
 	// Try to path to closest safe area
-	for (auto& pArea : vSafeAreas)
+	for (const auto& tAreaScore : vSafeAreas)
 	{
-		if (F::NavEngine.NavTo(pArea.first->m_vCenter, PriorityListEnum::EscapeDanger))
+		if (F::NavEngine.NavTo(tAreaScore.m_pArea->m_vCenter, PriorityListEnum::EscapeDanger))
 		{
-			pProjectileTargetArea = pArea.first;
+			pProjectileTargetArea = tAreaScore.m_pArea;
 			return true;
 		}
 	}

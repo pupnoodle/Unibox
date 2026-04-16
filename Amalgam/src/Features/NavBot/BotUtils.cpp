@@ -8,6 +8,7 @@
 #include "../Aimbot/AutoHeal/AutoHeal.h"
 #include "../Misc/NamedPipe/NamedPipe.h"
 #include "../Ticks/Ticks.h"
+#include "NavRuntime.h"
 
 static bool SmoothAimHasPriority()
 {
@@ -51,18 +52,6 @@ static int GetRangedFallbackSlot(CTFPlayer* pLocal)
 		return SLOT_SECONDARY;
 
 	return SLOT_MELEE;
-}
-
-static bool IsMinigunJumpLocked(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCmd* pCmd)
-{
-	if (!pLocal || pLocal->m_iClass() != TF_CLASS_HEAVY || !pWeapon || pWeapon->GetWeaponID() != TF_WEAPON_MINIGUN)
-		return false;
-
-	const int iState = pWeapon->As<CTFMinigun>()->m_iWeaponState();
-	if (iState == AC_STATE_STARTFIRING || iState == AC_STATE_FIRING || iState == AC_STATE_SPINNING)
-		return true;
-
-	return pCmd && (pCmd->buttons & IN_ATTACK2);
 }
 
 bool CBotUtils::HasMedigunTargets(CTFPlayer* pLocal, CTFWeaponBase* pWeapon)
@@ -1218,7 +1207,7 @@ bool CBotUtils::IsSurfaceWalkable(const Vector& vNormal)
 bool CBotUtils::SmartJump(CTFPlayer* pLocal, CUserCmd* pCmd)
 {
 	if (!pLocal || !pLocal->IsAlive() || !Vars::Misc::Movement::NavBot::SmartJump.Value) return false;
-	if (IsMinigunJumpLocked(pLocal, H::Entities.GetWeapon(), pCmd))
+	if (NavRuntime::IsMinigunJumpLocked(H::Entities.GetWeapon(), pCmd))
 		return false;
 
 	if (pLocal->OnSolid())
@@ -1318,7 +1307,7 @@ void CBotUtils::HandleSmartJump(CTFPlayer* pLocal, CUserCmd* pCmd)
 		return;
 	}
 
-	if (IsMinigunJumpLocked(pLocal, H::Entities.GetWeapon(), pCmd))
+	if (NavRuntime::IsMinigunJumpLocked(H::Entities.GetWeapon(), pCmd))
 	{
 		pCmd->buttons &= ~IN_JUMP;
 		m_eJumpState = STATE_AWAITING_JUMP;

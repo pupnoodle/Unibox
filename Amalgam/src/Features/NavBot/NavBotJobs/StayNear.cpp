@@ -1,4 +1,5 @@
 #include "StayNear.h"
+#include "NavJobUtils.h"
 #include "../NavEngine/NavEngine.h"
 #include "../../Players/PlayerUtils.h"
 
@@ -125,7 +126,7 @@ bool CNavBotStayNear::StayNearTarget(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, 
 	const Vector vAnchor = vPredictedOrigin + vForward * flOutrunDistance + vSide * (flSideDistance * flSideSign);
 
 	// Use std::pair to avoid using the distance functions more than once
-	std::vector<std::pair<CNavArea*, float>> vGoodAreas{};
+	std::vector<NavAreaScore_t> vGoodAreas{};
 
 	for (auto& tArea : F::NavEngine.GetNavFile()->m_vAreas)
 	{
@@ -149,17 +150,9 @@ bool CNavBotStayNear::StayNearTarget(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, 
 		}
 
 		const float flScore = flRangePenalty * 1.4f + flAnchorPenalty + flTravelPenalty * 0.15f + flAheadPenalty;
-		vGoodAreas.emplace_back(&tArea, flScore);
+		vGoodAreas.push_back({ &tArea, flScore });
 	}
-	// Sort based on score
-	std::sort(vGoodAreas.begin(), vGoodAreas.end(), [](std::pair<CNavArea*, float> a, std::pair<CNavArea*, float> b) { return a.second < b.second; });
-
-	// Try to path to all the good areas, based on distance
-	if (std::ranges::any_of(vGoodAreas, [&](std::pair<CNavArea*, float> pair) -> bool
-		{
-			return F::NavEngine.NavTo(pair.first->m_vCenter, PriorityListEnum::StayNear, true, !F::NavEngine.IsPathing());
-		})
-		)
+	if (NavJobUtils::TryNavToAreaScores(vGoodAreas, PriorityListEnum::StayNear))
 	{
 		m_iStayNearTargetIdx = pEntity->entindex();
 		if (auto pPlayerResource = H::Entities.GetResource())

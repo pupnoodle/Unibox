@@ -7,52 +7,9 @@
 #include "../../Ticks/Ticks.h"
 #include "../../Misc/Misc.h"
 #include "../BotUtils.h"
+#include "../NavRuntime.h"
 #include "../../FollowBot/FollowBot.h"
 #include "../NavBotJobs/EscapeDanger.h"
-
-static bool IsMovementLocked(CTFPlayer* pLocal)
-{
-	if (!pLocal || !pLocal->IsAlive())
-		return true;
-
-	if (pLocal->m_fFlags() & FL_FROZEN)
-		return true;
-
-	if (pLocal->InCond(TF_COND_STUNNED) && (pLocal->m_iStunFlags() & (TF_STUN_CONTROLS | TF_STUN_LOSER_STATE)))
-		return true;
-
-	if (pLocal->IsTaunting() && !pLocal->m_bAllowMoveDuringTaunt())
-		return true;
-
-	if (auto pGameRules = I::TFGameRules())
-	{
-		if (pGameRules->m_bInWaitingForPlayers())
-			return true;
-
-		const int iRoundState = pGameRules->m_iRoundState();
-		if (iRoundState == GR_STATE_PREROUND || iRoundState == GR_STATE_BETWEEN_RNDS)
-			return true;
-	}
-
-	return false;
-}
-
-static bool IsMinigunJumpLocked(CTFWeaponBase* pWeapon, CUserCmd* pCmd)
-{
-	if (!pWeapon || pWeapon->GetWeaponID() != TF_WEAPON_MINIGUN)
-		return false;
-
-	const int iState = pWeapon->As<CTFMinigun>()->m_iWeaponState();
-	if (iState == AC_STATE_STARTFIRING || iState == AC_STATE_FIRING || iState == AC_STATE_SPINNING)
-		return true;
-
-	return pCmd && (pCmd->buttons & IN_ATTACK2);
-}
-
-static bool CanIssueNavJump(CTFWeaponBase* pWeapon, CUserCmd* pCmd)
-{
-	return !IsMinigunJumpLocked(pWeapon, pCmd);
-}
 
 static bool IsPayloadEscortPaceState(CTFPlayer* pLocal, const Vector& vLocalOrigin)
 {
@@ -1386,7 +1343,7 @@ void CNavEngine::CheckBlacklist(CTFPlayer* pLocal)
 
 void CNavEngine::UpdateStuckTime(CTFPlayer* pLocal, CUserCmd* pCmd)
 {
-	if (IsMovementLocked(pLocal))
+	if (NavRuntime::IsMovementLocked(pLocal))
 	{
 		m_tInactivityTimer.Update();
 		return;
@@ -1848,7 +1805,7 @@ void CNavEngine::FollowCrumbs(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCm
 		static Timer tLastJump{};
 		if (!bPayloadEscortPace &&
 			pLocal->OnSolid() &&
-			CanIssueNavJump(pWeapon, pCmd) &&
+			NavRuntime::CanIssueNavJump(pWeapon, pCmd) &&
 			m_tInactivityTimer.Check(1.0f) &&
 			tLastJump.Check(0.6f))
 		{
@@ -2210,7 +2167,7 @@ void CNavEngine::FollowCrumbs(CTFPlayer* pLocal, CTFWeaponBase* pWeapon, CUserCm
 			// Phase 2 (~2.0-4.0s): jump with moderate direction adjustment
 			else if (m_iNoProgressSamples < 10)
 			{
-				if (bCanJump && CanIssueNavJump(pWeapon, pCmd) && pLocal->OnSolid() && tLastJump.Check(0.5f))
+				if (bCanJump && NavRuntime::CanIssueNavJump(pWeapon, pCmd) && pLocal->OnSolid() && tLastJump.Check(0.5f))
 				{
 					F::BotUtils.ForceJump();
 					m_iStuckJumpAttempts++;
